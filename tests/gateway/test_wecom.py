@@ -14,16 +14,18 @@ from gateway.platforms.base import SendResult
 
 
 class TestWeComRequirements:
-    def test_returns_false_without_aiohttp(self, monkeypatch):
+    def test_returns_false_when_aiohttp_lazy_install_unavailable(self, monkeypatch):
         monkeypatch.setattr("gateway.platforms.wecom.AIOHTTP_AVAILABLE", False)
         monkeypatch.setattr("gateway.platforms.wecom.HTTPX_AVAILABLE", True)
+        monkeypatch.setattr("tools.lazy_deps.ensure_and_bind", lambda *_args, **_kwargs: False)
         from gateway.platforms.wecom import check_wecom_requirements
 
         assert check_wecom_requirements() is False
 
-    def test_returns_false_without_httpx(self, monkeypatch):
+    def test_returns_false_when_httpx_missing_and_rebind_unavailable(self, monkeypatch):
         monkeypatch.setattr("gateway.platforms.wecom.AIOHTTP_AVAILABLE", True)
         monkeypatch.setattr("gateway.platforms.wecom.HTTPX_AVAILABLE", False)
+        monkeypatch.setattr("tools.lazy_deps.ensure_and_bind", lambda *_args, **_kwargs: False)
         from gateway.platforms.wecom import check_wecom_requirements
 
         assert check_wecom_requirements() is False

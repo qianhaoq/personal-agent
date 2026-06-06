@@ -51,6 +51,44 @@ Phase 1 should not rename the Python package, replace the Hermes CLI, or ship
 mobile apps. Native iOS/Android work should start after the wire protocol and
 pairing model have tests.
 
+## China Messaging Channel Baseline
+
+This fork treats the China messaging surfaces as first-class local deployment
+targets:
+
+- Feishu/Lark: `gateway/platforms/feishu.py`, `hermes gateway setup`, and the
+  `feishu` / `china-messaging` extras.
+- WeCom bot: `gateway/platforms/wecom.py`, QR/manual setup, and the `wecom` /
+  `china-messaging` extras.
+- WeCom callback: `gateway/platforms/wecom_callback.py`, encrypted XML
+  callbacks, and the `wecom` / `china-messaging` extras.
+- Weixin personal WeChat: `gateway/platforms/weixin.py`, iLink QR login, and
+  the `weixin` / `china-messaging` extras.
+
+Runtime dependencies stay opt-in and lazy-installable; they must not be added
+to `[all]`. The fork's `dev` extra intentionally includes the small set needed
+to run the offline gateway tests for these channels.
+
+Recommended local smoke command:
+
+```bash
+scripts/run_tests.sh \
+  tests/gateway/test_feishu.py \
+  tests/gateway/test_feishu_approval_buttons.py \
+  tests/gateway/test_feishu_bot_admission.py \
+  tests/gateway/test_feishu_bot_auth_bypass.py \
+  tests/gateway/test_feishu_comment.py \
+  tests/gateway/test_feishu_comment_rules.py \
+  tests/gateway/test_feishu_meeting_invite.py \
+  tests/gateway/test_feishu_onboard.py \
+  tests/gateway/test_setup_feishu.py \
+  tests/gateway/test_wecom.py \
+  tests/gateway/test_wecom_callback.py \
+  tests/gateway/test_weixin.py \
+  tests/cron/test_scheduler.py \
+  tests/test_project_metadata.py
+```
+
 ## Safety Defaults
 
 - Mobile and desktop nodes are peripherals, not gateway hosts.

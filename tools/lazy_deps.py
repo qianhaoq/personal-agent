@@ -148,10 +148,20 @@ LAZY_DEPS: dict[str, tuple[str, ...]] = {
         "lark-oapi==1.5.3",
         "qrcode==7.4.2",
     ),
-    # WeCom callback-mode adapter — parses untrusted XML POST bodies. Pulls
-    # defusedxml only; aiohttp/httpx are core dependencies of every messaging
-    # adapter and ship via `platform.discord` / `platform.slack` / etc.
-    "platform.wecom_callback": ("defusedxml==0.7.1",),
+    "platform.wecom": (
+        "aiohttp==3.13.4",  # CVE-2026-34513/34518/34519/34520/34525
+        "qrcode==7.4.2",
+    ),
+    "platform.weixin": (
+        "aiohttp==3.13.4",  # CVE-2026-34513/34518/34519/34520/34525
+        "qrcode==7.4.2",
+    ),
+    # WeCom callback-mode adapter — parses untrusted XML POST bodies. httpx is
+    # a core dependency, but aiohttp and defusedxml are channel-local.
+    "platform.wecom_callback": (
+        "aiohttp==3.13.4",  # CVE-2026-34513/34518/34519/34520/34525
+        "defusedxml==0.7.1",
+    ),
 
     # ─── Terminal backends ─────────────────────────────────────────────────
     "terminal.modal": ("modal==1.3.4",),

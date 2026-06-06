@@ -59,7 +59,31 @@ MESSAGE_DEDUP_TTL_SECONDS = 300
 
 
 def check_wecom_callback_requirements() -> bool:
-    return AIOHTTP_AVAILABLE and HTTPX_AVAILABLE and DEFUSEDXML_AVAILABLE
+    """Return True when callback HTTP/XML dependencies are available.
+
+    Lazy-installs aiohttp + defusedxml via
+    ``tools.lazy_deps.ensure("platform.wecom_callback")`` on first use. httpx
+    is a core Hermes dependency and is rebound here for partial environments.
+    """
+    if AIOHTTP_AVAILABLE and HTTPX_AVAILABLE and DEFUSEDXML_AVAILABLE:
+        return True
+
+    def _import():
+        import defusedxml.ElementTree as _ET
+        from aiohttp import web as _web
+        import httpx as _httpx
+
+        return {
+            "ET": _ET,
+            "web": _web,
+            "httpx": _httpx,
+            "AIOHTTP_AVAILABLE": True,
+            "HTTPX_AVAILABLE": True,
+            "DEFUSEDXML_AVAILABLE": True,
+        }
+
+    from tools.lazy_deps import ensure_and_bind
+    return ensure_and_bind("platform.wecom_callback", _import, globals(), prompt=False)
 
 
 class WecomCallbackAdapter(BasePlatformAdapter):

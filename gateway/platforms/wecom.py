@@ -106,8 +106,28 @@ VOICE_SUPPORTED_MIMES = {"audio/amr"}
 
 
 def check_wecom_requirements() -> bool:
-    """Check if WeCom runtime dependencies are available."""
-    return AIOHTTP_AVAILABLE and HTTPX_AVAILABLE
+    """Check if WeCom runtime dependencies are available.
+
+    Lazy-installs aiohttp via ``tools.lazy_deps.ensure("platform.wecom")`` on
+    first use. httpx is a core Hermes dependency, but rebinding it here keeps
+    this gate robust in partially provisioned environments.
+    """
+    if AIOHTTP_AVAILABLE and HTTPX_AVAILABLE:
+        return True
+
+    def _import():
+        import aiohttp as _aiohttp
+        import httpx as _httpx
+
+        return {
+            "aiohttp": _aiohttp,
+            "httpx": _httpx,
+            "AIOHTTP_AVAILABLE": True,
+            "HTTPX_AVAILABLE": True,
+        }
+
+    from tools.lazy_deps import ensure_and_bind
+    return ensure_and_bind("platform.wecom", _import, globals(), prompt=False)
 
 
 def _coerce_list(value: Any) -> List[str]:

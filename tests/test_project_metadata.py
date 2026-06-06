@@ -71,7 +71,7 @@ def test_lazy_installable_extras_excluded_from_all():
         "edge-tts", "tts-premium",
         "voice",  # faster-whisper / sounddevice / numpy
         "modal", "daytona",
-        "messaging", "slack", "matrix", "dingtalk", "feishu",
+        "messaging", "slack", "matrix", "dingtalk", "feishu", "wecom", "weixin",
         "honcho", "hindsight",
         "mistral",  # mistralai — Voxtral STT/TTS, lazy-installed (stt.mistral / tts.mistral)
     }
@@ -97,6 +97,48 @@ def test_dev_extra_excluded_from_all():
         spec == "hermes-agent[dev]"
         for spec in optional_dependencies["all"]
     )
+
+
+def test_dev_extra_covers_china_gateway_smoke_dependencies():
+    """The repository's dev install must be able to run China gateway smoke tests.
+
+    Feishu, WeCom, WeCom callback, and Weixin are optional at runtime, but their
+    unit tests import and mock aiohttp/lark/defusedxml surfaces directly.
+    """
+    optional_dependencies = _load_optional_dependencies()
+
+    dev_extra = set(optional_dependencies["dev"])
+    assert {
+        "aiohttp==3.13.4",
+        "defusedxml==0.7.1",
+        "lark-oapi==1.5.3",
+        "qrcode==7.4.2",
+    }.issubset(dev_extra)
+
+
+def test_china_messaging_extra_collects_chinese_platforms():
+    optional_dependencies = _load_optional_dependencies()
+
+    assert optional_dependencies["china-messaging"] == [
+        "hermes-agent[feishu]",
+        "hermes-agent[wecom]",
+        "hermes-agent[weixin]",
+    ]
+
+
+def test_aiohttp_pins_match_lazy_install_policy():
+    """aiohttp is shared by several opt-in gateway surfaces.
+
+    Keep all explicit pyproject pins on the same patched version as the
+    lazy-install allowlist, otherwise combined extras can become unsatisfiable.
+    """
+    optional_dependencies = _load_optional_dependencies()
+    from tools.lazy_deps import LAZY_DEPS
+
+    for extra in ("messaging", "slack", "homeassistant", "sms", "wecom", "weixin"):
+        assert "aiohttp==3.13.4" in optional_dependencies[extra]
+    for feature in ("platform.slack", "platform.wecom", "platform.wecom_callback", "platform.weixin"):
+        assert "aiohttp==3.13.4" in LAZY_DEPS[feature]
 
 
 def test_messaging_extra_includes_qrcode_for_weixin_setup():

@@ -154,8 +154,36 @@ _MARKDOWN_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 
 
 def check_weixin_requirements() -> bool:
-    """Return True when runtime dependencies for Weixin are available."""
-    return AIOHTTP_AVAILABLE and CRYPTO_AVAILABLE
+    """Return True when runtime dependencies for Weixin are available.
+
+    Lazy-installs aiohttp via ``tools.lazy_deps.ensure("platform.weixin")`` on
+    first use. cryptography is provided by the core PyJWT[crypto] dependency
+    and is rebound here after the lazy install succeeds.
+    """
+    if AIOHTTP_AVAILABLE and CRYPTO_AVAILABLE:
+        return True
+
+    def _import():
+        import aiohttp as _aiohttp
+        from cryptography.hazmat.backends import default_backend as _default_backend
+        from cryptography.hazmat.primitives.ciphers import (
+            Cipher as _Cipher,
+            algorithms as _algorithms,
+            modes as _modes,
+        )
+
+        return {
+            "aiohttp": _aiohttp,
+            "default_backend": _default_backend,
+            "Cipher": _Cipher,
+            "algorithms": _algorithms,
+            "modes": _modes,
+            "AIOHTTP_AVAILABLE": True,
+            "CRYPTO_AVAILABLE": True,
+        }
+
+    from tools.lazy_deps import ensure_and_bind
+    return ensure_and_bind("platform.weixin", _import, globals(), prompt=False)
 
 
 def _safe_id(value: Optional[str], keep: int = 8) -> str:
