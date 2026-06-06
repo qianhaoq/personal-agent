@@ -15,6 +15,28 @@ source .venv/bin/activate   # or: source venv/bin/activate
 `$HOME/.hermes/hermes-agent/venv` (for worktrees that share a venv with the
 main checkout).
 
+## AI-native Linear/GitHub Workflow
+
+Use this workflow for Linear-driven agent work in this repository.
+
+- Treat a Linear issue as the task contract. Before editing, read the issue goal,
+  context, acceptance criteria, constraints, and verification section.
+- Start with exploration and a short implementation plan for non-trivial work.
+  Do not make broad changes before the plan identifies files, risks, and tests.
+- Work on an isolated branch or worktree. Prefer the Dev Container when the task
+  depends on dependencies, tests, or reproducible setup.
+- Every pull request must include the Linear issue link, plan summary, changed
+  behavior, verification evidence, risk notes, and human-review focus.
+- AI review may catch obvious defects, missing tests, and unsafe assumptions, but
+  a human owner is responsible for merge, release timing, and production impact.
+- Never auto-merge. Never write secrets, credentials, or production-only config
+  into code, docs, Linear issues, or PR comments.
+- When a failure teaches a reusable rule, update this file, the PR template,
+  docs, tests, or a runbook so the next agent has better instructions.
+
+Default Linear queue for this pilot:
+`待 Agent 处理 -> Agent 执行中 -> AI 评审 -> 人工评审 -> 预览验证 -> 待合并 -> Done`.
+
 ## Project Structure
 
 File counts shift constantly — don't treat the tree below as exhaustive.
