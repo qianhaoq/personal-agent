@@ -1,17 +1,17 @@
 ## Goal
 
-<!-- Describe the change clearly. What problem does it solve? Why is this approach the right one? -->
+<!-- 中文优先：说明这次改动解决什么问题、为什么采用这个方案。English is fine for external contributor context. -->
 
 ## Related Issue
 
-<!-- Link the issue this PR addresses. Prefer a Linear issue for AI-native work. -->
+<!-- 中文优先：链接对应 Linear / GitHub issue。AI-native 任务优先填写 Linear issue。 -->
 
 Linear issue:
 GitHub issue: Fixes #
 
 ## Agent Plan
 
-<!-- For agent-created or agent-assisted PRs, summarize the plan that was reviewed before implementation. Mention important files, constraints, and rejected broad changes. -->
+<!-- 中文优先：agent 创建或辅助的 PR 需要写计划摘要、关键文件、约束和拒绝的大范围改动。 -->
 
 ## Type of Change
 
@@ -28,13 +28,13 @@ GitHub issue: Fixes #
 
 ## Changes Made
 
-<!-- List the specific changes. Include file paths for code changes. -->
+<!-- 中文优先：列出具体改动。代码改动请包含关键文件路径。 -->
 
 -
 
 ## Verification Evidence
 
-<!-- Paste commands and outcomes. For docs-only changes, explain the static check performed. -->
+<!-- 中文优先：粘贴命令和结果。文档-only 改动说明做过什么静态检查。 -->
 
 - [ ] Relevant targeted tests or static checks were run.
 - [ ] CI is expected to cover the remaining surface.
@@ -48,19 +48,19 @@ Commands and results:
 
 ## Environment
 
-<!-- State whether this used a Dev Container, sandbox, worktree, local checkout, or remote agent environment. -->
+<!-- 中文优先：说明使用了 Dev Container、sandbox、worktree、本地 checkout 还是远程 agent 环境。 -->
 
 ## Risks
 
-<!-- Call out security, credentials, data migration, compatibility, release, or rollback risks. Write "None identified" only after checking. -->
+<!-- 中文优先：说明安全、凭证、数据迁移、兼容性、发布或回滚风险。检查后才能写 "None identified"。 -->
 
 ## Human Review Focus
 
-<!-- Name the decisions the human owner must review. AI review is advisory; the human owner is accountable for merge and release. -->
+<!-- 中文优先：列出需要人类 owner 判断的点。AI review 只是建议，merge 和 release 责任在人。 -->
 
 ## Follow-up Memory
 
-<!-- If this PR revealed a reusable rule, say whether AGENTS.md, docs, tests, skills, or a runbook were updated. -->
+<!-- 中文优先：如果本 PR 暴露出可复用规则，说明是否已更新 AGENTS.md、docs、tests、skills 或 runbook。 -->
 
 ## Checklist
 
