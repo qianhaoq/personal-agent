@@ -17,24 +17,17 @@ main checkout).
 
 ## AI-native Linear/GitHub Workflow
 
-Use this workflow for Linear-driven agent work in this repository.
+以下规则用于本仓库的 Linear 驱动 agent 工作流。
 
-- Treat a Linear issue as the task contract. Before editing, read the issue goal,
-  context, acceptance criteria, constraints, and verification section.
-- Start with exploration and a short implementation plan for non-trivial work.
-  Do not make broad changes before the plan identifies files, risks, and tests.
-- Work on an isolated branch or worktree. Prefer the Dev Container when the task
-  depends on dependencies, tests, or reproducible setup.
-- Every pull request must include the Linear issue link, plan summary, changed
-  behavior, verification evidence, risk notes, and human-review focus.
-- AI review may catch obvious defects, missing tests, and unsafe assumptions, but
-  a human owner is responsible for merge, release timing, and production impact.
-- Never auto-merge. Never write secrets, credentials, or production-only config
-  into code, docs, Linear issues, or PR comments.
-- When a failure teaches a reusable rule, update this file, the PR template,
-  docs, tests, or a runbook so the next agent has better instructions.
+- 把 Linear issue 当成任务契约。编辑前必须读取 issue 的目标、上下文、验收标准、约束和验证方式。
+- 非平凡任务先探索并输出简短实现计划。计划需要说明要改的文件、风险和测试方式，再进入大范围编辑。
+- 使用独立 branch 或 worktree。任务依赖安装、测试或可复现环境时，优先使用 Dev Container。
+- 每个 PR 必须包含 Linear issue 链接、计划摘要、行为变更、验证证据、风险说明和人工审查重点。
+- AI review 可以先检查明显缺陷、遗漏测试和不安全假设，但 merge、发布时间和生产影响由人类 owner 负责。
+- 禁止自动 merge。不要把密钥、凭证或生产专用配置写入代码、文档、Linear issue 或 PR 评论。
+- 如果失败暴露出可复用规则，要更新本文件、PR 模板、docs、测试或 runbook，让下一个 agent 受益。
 
-Default Linear queue for this pilot:
+试点默认 Linear 队列：
 `待 Agent 处理 -> Agent 执行中 -> AI 评审 -> 人工评审 -> 预览验证 -> 待合并 -> Done`.
 
 ## Project Structure
