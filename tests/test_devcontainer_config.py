@@ -23,6 +23,12 @@ def _command_tokens(config, key):
     return expanded
 
 
+def _command_segments(config, key):
+    tokens = shlex.split(config[key])
+    command = tokens[2] if tokens[:2] == ["bash", "-lc"] else config[key]
+    return [shlex.split(segment.strip()) for segment in command.split("&&")]
+
+
 def test_devcontainer_uses_ci_aligned_python_and_node():
     config = _load_devcontainer()
     features = config["features"]
@@ -58,12 +64,14 @@ def test_devcontainer_keeps_heavy_setup_prebuild_friendly():
     config = _load_devcontainer()
 
     update_tokens = set(_command_tokens(config, "updateContentCommand"))
-    post_create_tokens = set(_command_tokens(config, "postCreateCommand"))
+    post_create_segments = _command_segments(config, "postCreateCommand")
 
     assert {"uv", "pip", "install"}.issubset(update_tokens)
     assert {"npm", "install"}.issubset(update_tokens)
-    assert {"python", "node", "uv", "--version"}.issubset(post_create_tokens)
-    assert "install" not in post_create_tokens
+    assert ["python", "--version"] in post_create_segments
+    assert ["node", "--version"] in post_create_segments
+    assert ["uv", "--version"] in post_create_segments
+    assert all("install" not in segment for segment in post_create_segments)
 
 
 def test_devcontainer_supports_github_cli_codespace_ssh():
