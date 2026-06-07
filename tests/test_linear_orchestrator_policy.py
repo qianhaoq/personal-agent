@@ -1,3 +1,4 @@
+from linear_orchestrator.clients import GitHubClient
 from linear_orchestrator.config import load_config
 from linear_orchestrator.models import Issue
 from linear_orchestrator.policy import decide_issue, decide_issues, title_similarity
@@ -147,6 +148,55 @@ def test_check_summary_distinguishes_failed_and_pending():
     assert summarize_check_state([{"state": "SUCCESS"}, {"state": "SKIPPED"}]) == "success"
     assert summarize_check_state([{"state": "SUCCESS"}, {"state": "FAILURE"}]) == "failed"
     assert summarize_check_state([{"state": "SUCCESS"}, {"state": "PENDING"}]) == "pending"
+
+
+class _FakeGitHubClient(GitHubClient):
+    def __init__(self, payload):
+        self.payload = payload
+
+    def _gh_json(self, args):  # noqa: ARG002
+        return self.payload
+
+
+def test_github_pr_lookup_requires_exact_linear_issue_key():
+    github = _FakeGitHubClient(
+        [
+            {
+                "number": 4,
+                "title": "ONE-27: Global Linear Orchestrator v1",
+                "body": "Linear issue: ONE-27",
+                "headRefName": "qianhao/one-27-global-linear-orchestrator-v1",
+                "url": "https://github.com/qianhaoq/personal-agent/pull/4",
+                "state": "MERGED",
+                "isDraft": False,
+                "mergeStateStatus": "UNKNOWN",
+            },
+            {
+                "number": 8,
+                "title": "Fix monitor handoff",
+                "body": "Linear issue: ONE-7",
+                "headRefName": "qianhao/monitor-handoff",
+                "url": "https://github.com/qianhaoq/personal-agent/pull/8",
+                "state": "OPEN",
+                "isDraft": False,
+                "mergeStateStatus": "CLEAN",
+            },
+            {
+                "number": 9,
+                "title": "Background runner polish",
+                "body": "No issue key in body",
+                "headRefName": "qianhao/one-7-background-runner-polish",
+                "url": "https://github.com/qianhaoq/personal-agent/pull/9",
+                "state": "OPEN",
+                "isDraft": True,
+                "mergeStateStatus": "UNKNOWN",
+            },
+        ]
+    )
+
+    prs = github.find_prs_for_issue("qianhaoq/personal-agent", "ONE-7")
+
+    assert [pr.number for pr in prs] == [8, 9]
 
 
 def test_fixture_loader_accepts_top_level_issue_arrays(tmp_path):

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from dataclasses import dataclass
 from typing import Any
@@ -141,6 +142,13 @@ class PullRequestSummary:
     merge_state_status: str | None = None
 
 
+def _contains_linear_issue_key(value: str | None, issue_key: str) -> bool:
+    if not value:
+        return False
+    key = re.escape(issue_key)
+    return re.search(rf"(?<![A-Z0-9]){key}(?![A-Z0-9])", value, re.IGNORECASE) is not None
+
+
 class GitHubClient:
     def __init__(self, gh_bin: str = "gh"):
         self.gh_bin = gh_bin
@@ -173,9 +181,16 @@ class GitHubClient:
                 "--search",
                 issue_key,
                 "--json",
-                "number,title,url,state,isDraft,mergeStateStatus",
+                "number,title,url,state,isDraft,mergeStateStatus,headRefName,body",
             ]
         )
+        exact_matches = [
+            item for item in data or []
+            if any(
+                _contains_linear_issue_key(item.get(field), issue_key)
+                for field in ("title", "body", "headRefName")
+            )
+        ]
         return [
             PullRequestSummary(
                 number=item["number"],
@@ -185,7 +200,7 @@ class GitHubClient:
                 is_draft=bool(item.get("isDraft")),
                 merge_state_status=item.get("mergeStateStatus"),
             )
-            for item in data or []
+            for item in exact_matches
         ]
 
     def pr_checks(self, repo: str, pr_number: int) -> list[dict[str, Any]]:
