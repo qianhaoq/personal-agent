@@ -1,0 +1,55 @@
+{
+  "team_key": "ONE",
+  "states": {
+    "triage": "Triage",
+    "backlog": "Backlog",
+    "todo": "待办",
+    "ready": "待 Agent 处理",
+    "running": "Agent 执行中",
+    "in_progress": "处理中",
+    "ai_review": "AI 评审",
+    "review": "评审中",
+    "human_review": "人工评审",
+    "preview": "预览验证",
+    "merge_ready": "待合并",
+    "done": "Done",
+    "canceled": "Canceled",
+    "duplicate": "Duplicate"
+  },
+  "terminal_states": ["Done", "Canceled", "Duplicate"],
+  "repo_adapters": [
+    {
+      "name": "personal-agent",
+      "repo": "qianhaoq/personal-agent",
+      "local_path": "/Users/qianhao02/codex/personal-agent",
+      "matchers": ["personal-agent", "hermes", "个人助理", "agent", "gateway", "mcp"],
+      "setup_commands": ["uv pip install -e '.[dev]'"],
+      "test_commands": ["scripts/run_tests.sh tests/test_linear_orchestrator_policy.py"],
+      "bdd_commands": [],
+      "preview_commands": [],
+      "allow_auto_run": true
+    },
+    {
+      "name": "qianhaoq.github.io",
+      "repo": "qianhaoq/qianhaoq.github.io",
+      "local_path": "/Users/qianhao02/codex/qianhaoq.github.io",
+      "matchers": ["qianhaoq.github.io", "blog", "博客", "作者", "站点", "pages"],
+      "setup_commands": ["pnpm install --frozen-lockfile"],
+      "test_commands": ["pnpm quality:pr"],
+      "bdd_commands": ["pnpm test:bdd"],
+      "preview_commands": ["pnpm browser:smoke"],
+      "allow_auto_run": true
+    },
+    {
+      "name": "ai-quant-lab",
+      "repo": "qianhaoq/ai-quant-lab",
+      "local_path": "/Users/qianhao02/codex/ai-quant-lab",
+      "matchers": ["ai-quant-lab", "AI Quant", "量化", "trading", "alpaca", "broker"],
+      "setup_commands": ["pnpm install --frozen-lockfile", "pnpm api:install"],
+      "test_commands": ["pnpm api:test", "pnpm test", "pnpm typecheck", "pnpm lint", "pnpm build"],
+      "bdd_commands": [],
+      "preview_commands": [],
+      "allow_auto_run": false
+    }
+  ]
+}

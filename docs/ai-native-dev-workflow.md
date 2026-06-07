@@ -32,6 +32,19 @@
 - `待合并`：人工评审已通过，PR 等待最终 merge。
 - `Done`：任务已合并或以其他方式完成，并且证据已记录。
 
+## 全局 Orchestrator v1
+
+本仓库同时承载 OneRepublic 的全局 Linear Orchestrator。v1 不要求部署 `personal-agent` 常驻服务，而是通过本地/Codex 手动运行和 GitHub Actions 定时 dry-run 推进队列。
+
+入口见 [Global Linear Orchestrator](linear-orchestrator.md)：
+
+- `scan` 只读扫描所有非终态 issue。
+- `triage` 补齐标签、目标仓库、重复关系和人工问题；默认 dry-run，`--apply` 才写 Linear。
+- `run` 为符合策略的 issue 生成 coding-agent 执行计划；`--execute-agent` 才真正调用 agent。
+- `monitor` 读取 GitHub PR/check/preview 证据并准备状态同步。
+
+默认边界：AI 可以推进 triage、draft PR、测试和证据收集；merge、release、生产 secret、安全/交易风险和产品判断仍由人类 owner 决定。
+
 ## 人的职责
 
 人负责意图、优先级、取舍和生产责任。
