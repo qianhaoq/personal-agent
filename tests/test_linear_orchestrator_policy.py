@@ -112,6 +112,31 @@ def test_ready_low_risk_issue_builds_run_plan_with_repo_adapter_commands():
     assert "scripts/run_tests.sh tests/test_linear_orchestrator_policy.py" in plan.test_commands
 
 
+def test_repo_routing_ignores_process_labels_for_github_io_workflow_issue():
+    config = _config()
+    issue = Issue(
+        identifier="ONE-24",
+        title="拆分处理 Claude review reopened / ready_for_review 触发",
+        state="待 Agent 处理",
+        labels=("ai-agent-ready", "area:infra", "type:spike"),
+        project="AI-native qianhaoq.github.io 研发工作流",
+        description=(
+            "Acceptance: update `.github/workflows/claude-review.yml` behavior for "
+            "reopened and ready_for_review, then document the limitation in "
+            "`docs/ai-native-workflow.md`."
+        ),
+    )
+    decisions = decide_issues([issue], config)
+
+    plan = select_run_plan([issue], decisions, config)
+
+    assert plan is not None
+    assert plan.issue_key == "ONE-24"
+    assert plan.repo == "qianhaoq/qianhaoq.github.io"
+    assert "pnpm quality:pr" in plan.test_commands
+    assert "pnpm test:bdd" in plan.bdd_commands
+
+
 def test_monitor_updates_move_green_active_pr_to_preview():
     config = _config()
     issue = Issue(

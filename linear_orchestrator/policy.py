@@ -24,6 +24,24 @@ def _contains_any(value: str, terms: Iterable[str]) -> bool:
     return any(term.casefold() in normalized for term in terms)
 
 
+def _repo_routing_text(issue: Issue) -> str:
+    parts = [issue.title, issue.description or "", issue.project or ""]
+    return "\n".join(part for part in parts if part).casefold()
+
+
+def _repo_match_score(text: str, adapter: RepoAdapter) -> int:
+    score = 0
+    for candidate in (adapter.repo, adapter.name):
+        normalized = candidate.casefold().strip()
+        if normalized and normalized in text:
+            score = max(score, 1000 + len(normalized))
+    for matcher in adapter.matchers:
+        normalized = matcher.casefold().strip()
+        if normalized and normalized in text:
+            score = max(score, 100 + len(normalized))
+    return score
+
+
 def is_terminal(issue: Issue, config: OrchestratorConfig) -> bool:
     return issue.state in config.terminal_states
 
@@ -44,12 +62,16 @@ def has_acceptance_criteria(issue: Issue, config: OrchestratorConfig) -> bool:
 
 
 def select_repo(issue: Issue, config: OrchestratorConfig) -> RepoAdapter | None:
-    text = issue.text.casefold()
+    text = _repo_routing_text(issue)
+    matches: list[tuple[int, RepoAdapter]] = []
     for adapter in config.repo_adapters:
-        candidates = [adapter.name, adapter.repo, *adapter.matchers]
-        if any(candidate.casefold() in text for candidate in candidates if candidate):
-            return adapter
-    return None
+        score = _repo_match_score(text, adapter)
+        if score:
+            matches.append((score, adapter))
+    if not matches:
+        return None
+    matches.sort(key=lambda item: item[0], reverse=True)
+    return matches[0][1]
 
 
 def _shared_signal_bonus(left: str, right: str) -> float:
