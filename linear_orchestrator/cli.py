@@ -10,8 +10,10 @@ from pathlib import Path
 from linear_orchestrator.clients import GitHubClient, LinearClient, OrchestratorClientError
 from linear_orchestrator.config import load_config
 from linear_orchestrator.runner import (
+    apply_auto_merge_plans,
     apply_monitor_updates,
     apply_triage,
+    build_auto_merge_plans,
     build_monitor_updates,
     decision_table,
     decisions_for_issues,
@@ -92,15 +94,38 @@ def _cmd_monitor(args: argparse.Namespace) -> int:
     config = load_config(args.config)
     issues = _load_issues(args, config)
     decisions = decisions_for_issues(issues, config)
-    summary = monitor_issue_prs(decisions, GitHubClient(), include_checks=True)
+    github = GitHubClient()
+    summary = monitor_issue_prs(decisions, github, include_checks=True)
     updates = build_monitor_updates(summary, decisions, config)
+    auto_merge_plans = build_auto_merge_plans(summary, issues, decisions, config)
+    auto_merge_applied: list[str] = []
+    if args.auto_merge:
+        if args.fixture:
+            raise SystemExit("--auto-merge cannot be used with --fixture.")
+        auto_merge_applied = apply_auto_merge_plans(auto_merge_plans, github)
     if not args.apply:
-        _print({"prs": summary, "planned_updates": [update.to_dict() for update in updates]}, True)
+        _print(
+            {
+                "prs": summary,
+                "planned_updates": [update.to_dict() for update in updates],
+                "auto_merge_plans": [plan.to_dict() for plan in auto_merge_plans],
+                "auto_merge_applied": auto_merge_applied,
+            },
+            True,
+        )
         return 0
     if args.fixture:
         raise SystemExit("--apply cannot be used with --fixture.")
     applied = apply_monitor_updates(updates, issues, config, LinearClient())
-    _print({"prs": summary, "applied": applied}, True)
+    _print(
+        {
+            "prs": summary,
+            "applied": applied,
+            "auto_merge_plans": [plan.to_dict() for plan in auto_merge_plans],
+            "auto_merge_applied": auto_merge_applied,
+        },
+        True,
+    )
     return 0
 
 
@@ -165,6 +190,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     monitor = subparsers.add_parser("monitor", help="Read GitHub PR/check state for active issues")
     monitor.add_argument("--apply", action="store_true", help="Write Linear updates when transition rules allow it")
+    monitor.add_argument("--auto-merge", action="store_true", help="Arm GitHub auto-merge for eligible low-risk PRs")
     monitor.set_defaults(func=_cmd_monitor)
 
     doctor = subparsers.add_parser("doctor", help="Check credentials and repository access")

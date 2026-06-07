@@ -35,10 +35,15 @@ on:
         type: boolean
         required: false
         default: false
+      auto_merge:
+        description: "Arm auto-merge for eligible low-risk PRs in monitor mode"
+        type: boolean
+        required: false
+        default: true
 
 permissions:
-  contents: read
-  pull-requests: read
+  contents: write
+  pull-requests: write
 
 concurrency:
   group: linear-orchestrator-${{ github.ref }}
@@ -85,7 +90,7 @@ jobs:
           fi
           python -m linear_orchestrator.cli --json scan
           python -m linear_orchestrator.cli --json triage
-          python -m linear_orchestrator.cli --json monitor
+          python -m linear_orchestrator.cli --json monitor --auto-merge
 
       - name: Manual dispatch
         if: github.event_name == 'workflow_dispatch'
@@ -96,6 +101,7 @@ jobs:
           execute_flag=""
           issue_flag=""
           risk_flag=""
+          auto_merge_flag=""
           if [ "${{ inputs.apply }}" = "true" ]; then
             apply_flag="--apply"
           fi
@@ -107,6 +113,9 @@ jobs:
           fi
           if [ "${{ inputs.allow_high_risk_run }}" = "true" ]; then
             risk_flag="--allow-high-risk-run"
+          fi
+          if [ "${{ inputs.auto_merge }}" = "true" ]; then
+            auto_merge_flag="--auto-merge"
           fi
 
           case "$mode" in
@@ -120,7 +129,7 @@ jobs:
               python -m linear_orchestrator.cli --json triage $apply_flag
               ;;
             monitor)
-              python -m linear_orchestrator.cli --json monitor $apply_flag
+              python -m linear_orchestrator.cli --json monitor $apply_flag $auto_merge_flag
               ;;
             run)
               python -m linear_orchestrator.cli --json run $issue_flag $execute_flag $risk_flag

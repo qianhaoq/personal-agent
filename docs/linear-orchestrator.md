@@ -2,12 +2,12 @@
 
 `linear_orchestrator` is the non-daemon v1 control loop for the OneRepublic Linear team. It lets this repository act as the global automation host without deploying `personal-agent` as a long-running service.
 
-The v1 posture is conservative:
+The v1 posture is AI-first with explicit risk boundaries:
 
-- Scheduled GitHub Actions run `scan`, `triage`, and `monitor` in dry-run mode.
+- Scheduled GitHub Actions run `scan`, `triage`, and `monitor`; `monitor` can arm GitHub auto-merge for eligible low-risk PRs.
 - Linear writes require manual `workflow_dispatch` with `apply=true`.
 - Coding-agent execution requires manual `run` dispatch with `execute_agent=true`.
-- Security, trading, secrets, and production-release work stays guarded and cannot be merged or released automatically.
+- Security, trading, secrets, production-release work, and anything labeled `needs-human-review` stays guarded and cannot be merged or released automatically.
 
 ## Commands
 
@@ -69,11 +69,11 @@ Current repos:
 - `qianhaoq/qianhaoq.github.io`
 - `qianhaoq/ai-quant-lab`
 
-Each adapter declares repository matchers, setup commands, test commands, optional BDD commands, preview checks, and whether automatic low-risk execution is allowed.
+Each adapter declares repository matchers, setup commands, test commands, optional BDD commands, preview checks, whether automatic low-risk execution is allowed, and whether low-risk PRs can be armed for GitHub auto-merge.
 
 ## GitHub Actions
 
-`.github/workflows/linear-orchestrator.yml` runs every 30 minutes in dry-run mode:
+`.github/workflows/linear-orchestrator.yml` runs every 30 minutes:
 
 ```text
 scan -> triage -> monitor
@@ -83,8 +83,17 @@ Manual dispatch can run one mode at a time:
 
 - `scan`: read-only queue report.
 - `triage`: use `apply=true` to write Linear comments, labels, and status changes.
-- `monitor`: currently read-only until PR/check transition rules are hardened.
+- `monitor`: reads PR/check state and can arm auto-merge when `auto_merge=true`.
 - `run`: use `execute_agent=true` to invoke the coding agent for an eligible issue.
+
+`monitor` only arms auto-merge when all of these are true:
+
+- The repo adapter has `allow_auto_merge=true`.
+- The issue is not high-risk and does not have `needs-human-review`.
+- The PR is open, not draft, and not already auto-merge enabled.
+- GitHub checks are green.
+
+Auto-merge still relies on GitHub branch protection. It does not bypass required checks, required reviews, merge queues, or repository rules.
 
 Required secrets for live runs:
 
@@ -96,4 +105,4 @@ If `LINEAR_API_KEY` is not configured, scheduled runs skip safely and write a Gi
 
 ## Human Gate
 
-The orchestrator does not auto-merge, auto-release, alter production secrets, or enable live trading. Human owners remain responsible for product decisions, high-risk approval, final merge, release timing, and rollback decisions.
+The orchestrator may arm auto-merge for low-risk PRs after checks are green. Human owners remain responsible for product decisions, high-risk approval, release timing, rollback decisions, production secrets, and live trading controls.

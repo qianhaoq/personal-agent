@@ -23,8 +23,8 @@ main checkout).
 - 非平凡任务先探索并输出简短实现计划。计划需要说明要改的文件、风险和测试方式，再进入大范围编辑。
 - 使用独立 branch 或 worktree。任务依赖安装、测试或可复现环境时，优先使用 Dev Container。
 - 每个 PR 必须包含 Linear issue 链接、计划摘要、行为变更、验证证据、风险说明和人工审查重点。
-- AI review 可以先检查明显缺陷、遗漏测试和不安全假设，但 merge、发布时间和生产影响由人类 owner 负责。
-- 禁止自动 merge。不要把密钥、凭证或生产专用配置写入代码、文档、Linear issue 或 PR 评论。
+- AI review 可以先检查明显缺陷、遗漏测试和不安全假设；低风险 PR 在 required checks 全绿后可以 arm GitHub auto-merge。
+- 高风险、`needs-human-review`、生产发布、密钥、权限、交易和 release timing 仍由人类 owner 负责，不得自动 merge 或发布。不要把密钥、凭证或生产专用配置写入代码、文档、Linear issue 或 PR 评论。
 - 如果失败暴露出可复用规则，要更新本文件、PR 模板、docs、测试或 runbook，让下一个 agent 受益。
 
 试点默认 Linear 队列：
