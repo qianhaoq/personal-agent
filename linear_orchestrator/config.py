@@ -44,6 +44,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "bdd_commands": [],
             "preview_commands": [],
             "allow_auto_run": True,
+            "allow_auto_merge": True,
         },
         {
             "name": "qianhaoq.github.io",
@@ -67,6 +68,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "bdd_commands": ["pnpm test:bdd"],
             "preview_commands": ["pnpm browser:smoke"],
             "allow_auto_run": True,
+            "allow_auto_merge": True,
         },
         {
             "name": "ai-quant-lab",
@@ -78,6 +80,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "bdd_commands": [],
             "preview_commands": [],
             "allow_auto_run": False,
+            "allow_auto_merge": False,
         },
     ],
     "risk": {
@@ -151,6 +154,7 @@ def _repo_adapter_from_dict(value: dict[str, Any]) -> RepoAdapter:
         bdd_commands=tuple(value.get("bdd_commands", [])),
         preview_commands=tuple(value.get("preview_commands", [])),
         allow_auto_run=bool(value.get("allow_auto_run", True)),
+        allow_auto_merge=bool(value.get("allow_auto_merge", False)),
     )
 
 

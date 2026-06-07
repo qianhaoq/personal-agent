@@ -27,7 +27,8 @@
       "test_commands": ["scripts/run_tests.sh tests/test_linear_orchestrator_policy.py"],
       "bdd_commands": [],
       "preview_commands": [],
-      "allow_auto_run": true
+      "allow_auto_run": true,
+      "allow_auto_merge": true
     },
     {
       "name": "qianhaoq.github.io",
@@ -50,7 +51,8 @@
       "test_commands": ["pnpm quality:pr"],
       "bdd_commands": ["pnpm test:bdd"],
       "preview_commands": ["pnpm browser:smoke"],
-      "allow_auto_run": true
+      "allow_auto_run": true,
+      "allow_auto_merge": true
     },
     {
       "name": "ai-quant-lab",
@@ -61,7 +63,8 @@
       "test_commands": ["pnpm api:test", "pnpm test", "pnpm typecheck", "pnpm lint", "pnpm build"],
       "bdd_commands": [],
       "preview_commands": [],
-      "allow_auto_run": false
+      "allow_auto_run": false,
+      "allow_auto_merge": false
     }
   ]
 }

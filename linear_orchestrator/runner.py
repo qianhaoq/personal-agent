@@ -60,6 +60,24 @@ class MonitorUpdate:
         }
 
 
+@dataclass(frozen=True)
+class AutoMergePlan:
+    issue_key: str
+    repo: str
+    pr_number: int
+    url: str
+    reason: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "issue": self.issue_key,
+            "repo": self.repo,
+            "pr_number": self.pr_number,
+            "url": self.url,
+            "reason": self.reason,
+        }
+
+
 def load_fixture(path: str | Path) -> list[Issue]:
     fixture_path = Path(path)
     with fixture_path.open("r", encoding="utf-8") as handle:
@@ -373,6 +391,71 @@ def build_monitor_updates(summaries: Iterable[dict[str, object]], decisions: Ite
                 )
             )
     return updates
+
+
+def build_auto_merge_plans(
+    summaries: Iterable[dict[str, object]],
+    issues: Iterable[Issue],
+    decisions: Iterable[Decision],
+    config: OrchestratorConfig,
+) -> list[AutoMergePlan]:
+    issue_by_key = {issue.identifier: issue for issue in issues}
+    decision_by_key = {decision.issue_key: decision for decision in decisions}
+    plans: list[AutoMergePlan] = []
+    for summary in summaries:
+        issue_key = str(summary.get("issue", ""))
+        issue = issue_by_key.get(issue_key)
+        decision = decision_by_key.get(issue_key)
+        prs = list(summary.get("prs", []))
+        if not issue_key or not issue or not decision or not prs or not decision.target_repo:
+            continue
+        adapter = _adapter_by_repo(config, decision.target_repo)
+        if not _issue_allows_auto_merge(issue, adapter, config):
+            continue
+        if decision.current_state not in {
+            config.states["running"],
+            config.states["in_progress"],
+            config.states["ai_review"],
+            config.states["review"],
+            config.states["merge_ready"],
+        }:
+            continue
+
+        prs.sort(key=lambda item: int(item.get("number", 0)), reverse=True)
+        pr = prs[0]
+        if str(pr.get("state", "")).upper() != "OPEN":
+            continue
+        if bool(pr.get("is_draft")) or bool(pr.get("auto_merge_enabled")):
+            continue
+        if str(pr.get("check_state", "unknown")) != "success":
+            continue
+        plans.append(
+            AutoMergePlan(
+                issue_key=issue_key,
+                repo=decision.target_repo,
+                pr_number=int(pr["number"]),
+                url=str(pr.get("url", "")),
+                reason="Low-risk PR is open, non-draft, and all checks are green.",
+            )
+        )
+    return plans
+
+
+def apply_auto_merge_plans(plans: Iterable[AutoMergePlan], github: GitHubClient) -> list[str]:
+    applied: list[str] = []
+    for plan in plans:
+        github.enable_pr_auto_merge(plan.repo, plan.pr_number, merge_method="rebase")
+        applied.append(f"{plan.repo}#{plan.pr_number}")
+    return applied
+
+
+def _issue_allows_auto_merge(issue: Issue, adapter: RepoAdapter, config: OrchestratorConfig) -> bool:
+    if not adapter.allow_auto_merge:
+        return False
+    labels = {label.casefold() for label in issue.labels}
+    if config.labels["human_review"].casefold() in labels:
+        return False
+    return not is_high_risk(issue, config)
 
 
 def apply_monitor_updates(updates: Iterable[MonitorUpdate], issues: Iterable[Issue], config: OrchestratorConfig, client: LinearClient) -> list[str]:

@@ -140,6 +140,7 @@ class PullRequestSummary:
     state: str
     is_draft: bool
     merge_state_status: str | None = None
+    auto_merge_enabled: bool = False
 
 
 def _title_references_issue_key(title: str | None, issue_key: str) -> bool:
@@ -163,17 +164,20 @@ class GitHubClient:
     def __init__(self, gh_bin: str = "gh"):
         self.gh_bin = gh_bin
 
-    def _gh_json(self, args: list[str]) -> Any:
+    def _gh_env(self) -> dict[str, str]:
         env = os.environ.copy()
         if "GH_TOKEN" not in env and "GITHUB_TOKEN" in env:
             env["GH_TOKEN"] = env["GITHUB_TOKEN"]
+        return env
+
+    def _gh_json(self, args: list[str]) -> Any:
         completed = subprocess.run(
             [self.gh_bin, *args],
             check=True,
             capture_output=True,
             text=True,
             encoding="utf-8",
-            env=env,
+            env=self._gh_env(),
         )
         if not completed.stdout.strip():
             return None
@@ -191,7 +195,7 @@ class GitHubClient:
                 "--search",
                 issue_key,
                 "--json",
-                "number,title,url,state,isDraft,mergeStateStatus,body",
+                "number,title,url,state,isDraft,mergeStateStatus,autoMergeRequest,body",
             ]
         )
         exact_matches = [
@@ -209,6 +213,7 @@ class GitHubClient:
                 state=item["state"],
                 is_draft=bool(item.get("isDraft")),
                 merge_state_status=item.get("mergeStateStatus"),
+                auto_merge_enabled=bool(item.get("autoMergeRequest")),
             )
             for item in exact_matches
         ]
@@ -236,3 +241,47 @@ class GitHubClient:
                 }
             ]
         return list(data or [])
+
+    def enable_repo_auto_merge(self, repo: str) -> None:
+        subprocess.run([self.gh_bin, "repo", "edit", repo, "--enable-auto-merge"], check=True, env=self._gh_env())
+
+    def enable_pr_auto_merge(self, repo: str, pr_number: int, merge_method: str = "rebase") -> None:
+        method_flag = {
+            "merge": "--merge",
+            "squash": "--squash",
+            "rebase": "--rebase",
+        }.get(merge_method)
+        if method_flag is None:
+            raise ValueError(f"Unsupported merge method: {merge_method}")
+
+        command = [
+            self.gh_bin,
+            "pr",
+            "merge",
+            str(pr_number),
+            "--repo",
+            repo,
+            "--auto",
+            method_flag,
+            "--delete-branch",
+        ]
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env=self._gh_env(),
+        )
+        if completed.returncode == 0:
+            return
+        detail = f"{completed.stdout}\n{completed.stderr}"
+        if "Auto merge is not allowed for this repository" in detail:
+            self.enable_repo_auto_merge(repo)
+            subprocess.run(command, check=True, env=self._gh_env())
+            return
+        raise subprocess.CalledProcessError(
+            completed.returncode,
+            command,
+            output=completed.stdout,
+            stderr=completed.stderr,
+        )

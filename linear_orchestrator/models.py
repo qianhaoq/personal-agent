@@ -65,6 +65,7 @@ class RepoAdapter:
     bdd_commands: tuple[str, ...] = ()
     preview_commands: tuple[str, ...] = ()
     allow_auto_run: bool = True
+    allow_auto_merge: bool = False
 
 
 @dataclass(frozen=True)

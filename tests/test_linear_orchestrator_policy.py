@@ -2,7 +2,13 @@ from linear_orchestrator.clients import GitHubClient
 from linear_orchestrator.config import load_config
 from linear_orchestrator.models import Issue
 from linear_orchestrator.policy import decide_issue, decide_issues, title_similarity
-from linear_orchestrator.runner import build_monitor_updates, load_fixture, select_run_plan, summarize_check_state
+from linear_orchestrator.runner import (
+    build_auto_merge_plans,
+    build_monitor_updates,
+    load_fixture,
+    select_run_plan,
+    summarize_check_state,
+)
 
 
 def _config():
@@ -167,6 +173,94 @@ def test_monitor_updates_move_green_active_pr_to_preview():
 
     assert updates[0].next_state == "预览验证"
     assert "检查已通过" in updates[0].comment
+
+
+def test_monitor_arms_auto_merge_for_low_risk_green_pr():
+    config = _config()
+    issue = Issue(
+        identifier="ONE-24",
+        title="qianhaoq.github.io Claude review trigger update",
+        state="AI 评审",
+        labels=("ai-agent-ready", "area:infra"),
+        project="AI-native qianhaoq.github.io 研发工作流",
+        description="Acceptance: update workflow docs and tests.",
+    )
+    decision = decide_issues([issue], config)[0]
+    summaries = [
+        {
+            "issue": "ONE-24",
+            "repo": "qianhaoq/qianhaoq.github.io",
+            "prs": [
+                {
+                    "number": 19,
+                    "state": "OPEN",
+                    "is_draft": False,
+                    "url": "https://github.com/qianhaoq/qianhaoq.github.io/pull/19",
+                    "check_state": "success",
+                    "auto_merge_enabled": False,
+                }
+            ],
+        }
+    ]
+
+    plans = build_auto_merge_plans(summaries, [issue], [decision], config)
+
+    assert len(plans) == 1
+    assert plans[0].repo == "qianhaoq/qianhaoq.github.io"
+    assert plans[0].pr_number == 19
+
+
+def test_monitor_does_not_auto_merge_human_or_high_risk_prs():
+    config = _config()
+    human_issue = Issue(
+        identifier="ONE-23",
+        title="为博客增加作者编辑入口",
+        state="AI 评审",
+        labels=("ai-agent-ready", "needs-human-review", "area:web"),
+        description="Acceptance: add author editing UI.",
+    )
+    high_risk_issue = Issue(
+        identifier="ONE-8",
+        title="ai-quant-lab live trading controls",
+        state="AI 评审",
+        labels=("ai-agent-ready", "risk:trading"),
+        description="Acceptance: add guarded controls and tests.",
+    )
+    decisions = decide_issues([human_issue, high_risk_issue], config)
+    summaries = [
+        {
+            "issue": "ONE-23",
+            "repo": "qianhaoq/qianhaoq.github.io",
+            "prs": [
+                {
+                    "number": 23,
+                    "state": "OPEN",
+                    "is_draft": False,
+                    "url": "https://github.com/qianhaoq/qianhaoq.github.io/pull/23",
+                    "check_state": "success",
+                    "auto_merge_enabled": False,
+                }
+            ],
+        },
+        {
+            "issue": "ONE-8",
+            "repo": "qianhaoq/ai-quant-lab",
+            "prs": [
+                {
+                    "number": 8,
+                    "state": "OPEN",
+                    "is_draft": False,
+                    "url": "https://github.com/qianhaoq/ai-quant-lab/pull/8",
+                    "check_state": "success",
+                    "auto_merge_enabled": False,
+                }
+            ],
+        },
+    ]
+
+    plans = build_auto_merge_plans(summaries, [human_issue, high_risk_issue], decisions, config)
+
+    assert plans == []
 
 
 def test_check_summary_distinguishes_failed_and_pending():
