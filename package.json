@@ -10,7 +10,12 @@
     "web"
   ],
   "scripts": {
-    "postinstall": "echo '✅ Browser tools ready. Run: python run_agent.py --help'"
+    "postinstall": "echo '✅ Browser tools ready. Run: python run_agent.py --help'",
+    "orchestrator:scan": "python -m linear_orchestrator.cli scan",
+    "orchestrator:triage": "python -m linear_orchestrator.cli triage",
+    "orchestrator:run": "python -m linear_orchestrator.cli run",
+    "orchestrator:monitor": "python -m linear_orchestrator.cli monitor",
+    "orchestrator:doctor": "python -m linear_orchestrator.cli doctor"
   },
   "repository": {
     "type": "git",
