@@ -5,13 +5,13 @@ import json
 import os
 import subprocess
 import sys
-from pathlib import Path
 
 from linear_orchestrator.clients import GitHubClient, LinearClient, OrchestratorClientError
 from linear_orchestrator.config import load_config
 from linear_orchestrator.runner import (
     apply_auto_merge_plans,
     apply_monitor_updates,
+    apply_run_update,
     apply_triage,
     build_auto_merge_plans,
     build_monitor_updates,
@@ -22,6 +22,9 @@ from linear_orchestrator.runner import (
     monitor_issue_prs,
     select_run_plan,
 )
+
+
+_TRIAGE_ACTIONS = {"cancel_onboarding_noise", "mark_duplicate", "human_needed", "promote_to_agent_queue", "guarded_wait"}
 
 
 def _load_issues(args: argparse.Namespace, config):
@@ -52,10 +55,7 @@ def _cmd_triage(args: argparse.Namespace) -> int:
     config = load_config(args.config)
     issues = _load_issues(args, config)
     decisions = decisions_for_issues(issues, config)
-    actionable = [
-        decision for decision in decisions
-        if decision.action in {"cancel_onboarding_noise", "mark_duplicate", "human_needed", "promote_to_agent_queue", "guarded_wait"}
-    ]
+    actionable = [decision for decision in decisions if decision.action in _TRIAGE_ACTIONS]
     if not args.apply:
         _print([decision.to_dict() for decision in actionable] if args.json else decision_table(actionable), args.json)
         return 0
@@ -87,6 +87,161 @@ def _cmd_run(args: argparse.Namespace) -> int:
         raise SystemExit("Refusing guarded run without --allow-high-risk-run.")
     execute_run_plan(plan)
     _print({"run_plan": plan.to_dict(), "executed": True}, True)
+    return 0
+
+
+def _codex_credentials_present() -> bool:
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        return bool(os.getenv("OPENAI_API_KEY") or os.getenv("CODEX_API_KEY") or os.getenv("CODEX_OAUTH_ACCESS_TOKEN"))
+    if os.getenv("OPENAI_API_KEY") or os.getenv("CODEX_API_KEY") or os.getenv("CODEX_OAUTH_ACCESS_TOKEN"):
+        return True
+    try:
+        return subprocess.run(["codex", "login", "status"], capture_output=True, text=True, encoding="utf-8").returncode == 0
+    except FileNotFoundError:
+        return False
+
+
+def _repo_write_credentials_ready(repo: str) -> tuple[bool, str | None]:
+    current_repo = os.getenv("GITHUB_REPOSITORY")
+    if current_repo and repo.casefold() != current_repo.casefold() and not os.getenv("ORCHESTRATOR_GH_TOKEN"):
+        return False, "Cross-repository agent execution requires ORCHESTRATOR_GH_TOKEN."
+    return True, None
+
+
+def _run_existing_prs(plan, github: GitHubClient) -> list[dict[str, object]]:
+    return [pr.__dict__ for pr in github.find_prs_for_issue(plan.repo, plan.issue_key)]
+
+
+def _cmd_auto(args: argparse.Namespace) -> int:
+    if args.fixture and (args.apply or args.execute_agent or args.auto_merge):
+        raise SystemExit("--fixture can only be used with auto dry-run.")
+
+    config = load_config(args.config)
+    linear = None if args.fixture else LinearClient()
+    issues = _load_issues(args, config)
+    decisions = decisions_for_issues(issues, config)
+    actionable = [decision for decision in decisions if decision.action in _TRIAGE_ACTIONS]
+
+    triage_applied: list[str] = []
+    if args.apply:
+        triage_applied = apply_triage(actionable, issues, config, linear)
+        issues = linear.list_team_issues(config.team_key)
+        decisions = decisions_for_issues(issues, config)
+
+    github = GitHubClient()
+    run_results: list[dict[str, object]] = []
+    if args.execute_agent:
+        if not _codex_credentials_present():
+            run_results.append(
+                {
+                    "run_plan": None,
+                    "executed": False,
+                    "reason": "Missing unattended Codex credentials or local Codex login.",
+                }
+            )
+        else:
+            for _ in range(max(args.max_runs, 0)):
+                plan = select_run_plan(issues, decisions, config)
+                if not plan:
+                    run_results.append({"run_plan": None, "executed": False, "reason": "No eligible low-risk issue found."})
+                    break
+                ready, reason = _repo_write_credentials_ready(plan.repo)
+                if not ready:
+                    run_results.append({"run_plan": plan.to_dict(), "executed": False, "reason": reason})
+                    break
+                existing_prs = _run_existing_prs(plan, github)
+                if existing_prs:
+                    if args.apply:
+                        apply_run_update(
+                            plan.issue_key,
+                            issues,
+                            config,
+                            linear,
+                            next_state=config.states["ai_review"],
+                            labels_to_add=(config.labels["agent_ready"],),
+                            comment="AI Orchestrator 发现该 issue 已有关联 PR，跳过重复执行并进入 `AI 评审`。",
+                        )
+                        issues = linear.list_team_issues(config.team_key)
+                        decisions = decisions_for_issues(issues, config)
+                    run_results.append({"run_plan": plan.to_dict(), "executed": False, "reason": "Existing PR found.", "prs": existing_prs})
+                    continue
+                if args.apply:
+                    apply_run_update(
+                        plan.issue_key,
+                        issues,
+                        config,
+                        linear,
+                        next_state=config.states["running"],
+                        labels_to_add=(config.labels["agent_ready"],),
+                        comment=(
+                            "AI Orchestrator 正在自动执行该低风险 issue。\n\n"
+                            f"目标仓库：`{plan.repo}`\n"
+                            f"分支：`{plan.branch}`\n\n"
+                            "执行器只会创建 draft PR，不会自动 merge 或发布。"
+                        ),
+                    )
+                try:
+                    result = execute_run_plan(plan)
+                except Exception as exc:
+                    if args.apply:
+                        latest_issues = linear.list_team_issues(config.team_key)
+                        apply_run_update(
+                            plan.issue_key,
+                            latest_issues,
+                            config,
+                            linear,
+                            next_state=config.states["ready"],
+                            labels_to_add=(config.labels["agent_ready"],),
+                            comment=(
+                                "AI Orchestrator 自动执行失败，已回到 `待 Agent 处理`。\n\n"
+                                f"错误：`{type(exc).__name__}: {exc}`"
+                            ),
+                        )
+                    raise
+                if args.apply:
+                    latest_issues = linear.list_team_issues(config.team_key)
+                    pr_line = f"\n\nDraft PR: {result.pr_url}" if result.pr_url else ""
+                    apply_run_update(
+                        plan.issue_key,
+                        latest_issues,
+                        config,
+                        linear,
+                        next_state=config.states["ai_review"],
+                        labels_to_add=(config.labels["agent_ready"],),
+                        comment=(
+                            "AI Orchestrator 已完成自动执行，下一步进入 `AI 评审`。"
+                            f"{pr_line}\n\n"
+                            "最终 merge/release 仍由 human owner 决定。"
+                        ),
+                    )
+                    issues = linear.list_team_issues(config.team_key)
+                    decisions = decisions_for_issues(issues, config)
+                run_results.append({"run_plan": plan.to_dict(), "executed": True, "result": result.to_dict()})
+
+    summary = [] if args.fixture else monitor_issue_prs(decisions, github, include_checks=True)
+    updates = build_monitor_updates(summary, decisions, config)
+    auto_merge_plans = build_auto_merge_plans(summary, issues, decisions, config)
+    auto_merge_applied: list[str] = []
+    if args.auto_merge:
+        auto_merge_applied = apply_auto_merge_plans(auto_merge_plans, github)
+    monitor_applied: list[str] = []
+    if args.apply:
+        monitor_applied = apply_monitor_updates(updates, issues, config, linear)
+
+    _print(
+        {
+            "triage": {"planned": [decision.to_dict() for decision in actionable], "applied": triage_applied},
+            "runs": run_results,
+            "monitor": {
+                "prs": summary,
+                "planned_updates": [update.to_dict() for update in updates],
+                "applied": monitor_applied,
+                "auto_merge_plans": [plan.to_dict() for plan in auto_merge_plans],
+                "auto_merge_applied": auto_merge_applied,
+            },
+        },
+        True,
+    )
     return 0
 
 
@@ -187,6 +342,13 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--execute-agent", action="store_true", help="Actually invoke the coding agent")
     run.add_argument("--allow-high-risk-run", action="store_true", help="Allow guarded high-risk draft-PR work")
     run.set_defaults(func=_cmd_run)
+
+    auto = subparsers.add_parser("auto", help="Apply safe triage, run low-risk work, and monitor PRs")
+    auto.add_argument("--apply", action="store_true", help="Write Linear comments/status/labels")
+    auto.add_argument("--execute-agent", action="store_true", help="Actually invoke Codex for eligible low-risk work")
+    auto.add_argument("--auto-merge", action="store_true", help="Arm auto-merge for eligible low-risk PRs")
+    auto.add_argument("--max-runs", type=int, default=1, help="Maximum low-risk issues to execute in this loop")
+    auto.set_defaults(func=_cmd_auto)
 
     monitor = subparsers.add_parser("monitor", help="Read GitHub PR/check state for active issues")
     monitor.add_argument("--apply", action="store_true", help="Write Linear updates when transition rules allow it")

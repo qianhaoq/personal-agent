@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -78,6 +80,28 @@ class AutoMergePlan:
         }
 
 
+@dataclass(frozen=True)
+class RunExecutionResult:
+    issue_key: str
+    repo: str
+    branch: str
+    worktree_path: str
+    committed: bool
+    pushed: bool
+    pr_url: str | None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "issue": self.issue_key,
+            "repo": self.repo,
+            "branch": self.branch,
+            "worktree_path": self.worktree_path,
+            "committed": self.committed,
+            "pushed": self.pushed,
+            "pr_url": self.pr_url,
+        }
+
+
 def load_fixture(path: str | Path) -> list[Issue]:
     fixture_path = Path(path)
     with fixture_path.open("r", encoding="utf-8") as handle:
@@ -148,6 +172,36 @@ def apply_triage(decisions: Iterable[Decision], issues: Iterable[Issue], config:
     return applied
 
 
+def apply_run_update(
+    issue_key: str,
+    issues: Iterable[Issue],
+    config: OrchestratorConfig,
+    client: LinearClient,
+    *,
+    next_state: str,
+    comment: str,
+    labels_to_add: Iterable[str] = (),
+) -> bool:
+    state_ids = client.team_state_ids(config.team_key)
+    label_ids = client.team_label_ids(config.team_key)
+    issue_by_key = {issue.identifier: issue for issue in issues}
+    issue = issue_by_key.get(issue_key)
+    if not issue:
+        return False
+    linear_id = issue.raw.get("id")
+    if not linear_id:
+        return False
+    client.create_comment(linear_id, comment)
+    merged_label_names = set(issue.labels) | set(labels_to_add)
+    label_id_values = [label_ids[name] for name in sorted(merged_label_names) if name in label_ids]
+    client.update_issue(
+        linear_id,
+        state_id=state_ids.get(next_state),
+        label_ids=label_id_values if label_id_values else None,
+    )
+    return True
+
+
 def _adapter_by_repo(config: OrchestratorConfig, repo: str) -> RepoAdapter:
     for adapter in config.repo_adapters:
         if adapter.repo == repo:
@@ -169,7 +223,16 @@ def build_run_plan(issue: Issue, decision: Decision, config: OrchestratorConfig)
     if adapter.local_path:
         local_path = Path(adapter.local_path)
         worktree_path = str(local_path.parent / f"{local_path.name}-{branch}")
-    codex_command = ("codex", "exec", "--json", "--sandbox", "workspace-write", prompt)
+    codex_command = (
+        "codex",
+        "exec",
+        "--json",
+        "--sandbox",
+        "workspace-write",
+        "--ask-for-approval",
+        "never",
+        prompt,
+    )
     return RunPlan(
         issue_key=issue.identifier,
         issue_title=issue.title,
@@ -203,16 +266,8 @@ def select_run_plan(issues: Iterable[Issue], decisions: Iterable[Decision], conf
     return None
 
 
-def execute_run_plan(plan: RunPlan) -> None:
-    if not plan.local_path:
-        raise ValueError(f"{plan.repo} has no local_path configured.")
-    repo_path = Path(plan.local_path)
-    if not repo_path.exists():
-        raise ValueError(f"local_path does not exist: {repo_path}")
-    worktree_path = Path(plan.worktree_path or repo_path.parent / f"{repo_path.name}-{plan.branch}")
-    if worktree_path.exists():
-        raise ValueError(f"worktree path already exists: {worktree_path}")
-    subprocess.run(["git", "worktree", "add", "-b", plan.branch, str(worktree_path)], cwd=repo_path, check=True)
+def execute_run_plan(plan: RunPlan) -> RunExecutionResult:
+    _repo_path, worktree_path, temp_dir = _prepare_worktree(plan)
     commands: list[str | tuple[str, ...]] = [
         *plan.setup_commands,
         plan.codex_command,
@@ -224,13 +279,19 @@ def execute_run_plan(plan: RunPlan) -> None:
         if isinstance(command, str):
             subprocess.run(command, cwd=worktree_path, shell=True, check=True)
         else:
-            subprocess.run(list(command), cwd=worktree_path, check=True)
+            subprocess.run(list(command), cwd=worktree_path, check=True, env=_agent_command_env(command))
+    _ensure_git_identity(worktree_path)
+    committed = False
     if _git_has_changes(worktree_path):
         subprocess.run(["git", "add", "-A"], cwd=worktree_path, check=True)
-        subprocess.run(["git", "commit", "-m", f"{plan.issue_key} AI agent implementation"], cwd=worktree_path, check=True)
+        subprocess.run(["git", "commit", "-m", _commit_message(plan)], cwd=worktree_path, check=True)
+        committed = True
+    pushed = False
+    pr_url = None
     if _git_has_branch_diff(worktree_path):
         subprocess.run(["git", "push", "-u", "origin", plan.branch], cwd=worktree_path, check=True)
-        subprocess.run(
+        pushed = True
+        created = subprocess.run(
             [
                 "gh",
                 "pr",
@@ -245,7 +306,92 @@ def execute_run_plan(plan: RunPlan) -> None:
             ],
             cwd=worktree_path,
             check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env=_gh_env(),
         )
+        pr_url = created.stdout.strip() or None
+    if temp_dir:
+        temp_dir.cleanup()
+    return RunExecutionResult(
+        issue_key=plan.issue_key,
+        repo=plan.repo,
+        branch=plan.branch,
+        worktree_path=str(worktree_path),
+        committed=committed,
+        pushed=pushed,
+        pr_url=pr_url,
+    )
+
+
+def _prepare_worktree(plan: RunPlan) -> tuple[Path, Path, tempfile.TemporaryDirectory[str] | None]:
+    if plan.local_path:
+        repo_path = Path(plan.local_path)
+        if repo_path.exists():
+            worktree_path = Path(plan.worktree_path or repo_path.parent / f"{repo_path.name}-{plan.branch}")
+            if worktree_path.exists():
+                raise ValueError(f"worktree path already exists: {worktree_path}")
+            subprocess.run(["git", "worktree", "add", "-b", plan.branch, str(worktree_path)], cwd=repo_path, check=True)
+            return repo_path, worktree_path, None
+
+    temp_dir = tempfile.TemporaryDirectory(prefix="linear-orchestrator-")
+    repo_path = Path(temp_dir.name) / _slug(plan.repo.rsplit("/", 1)[-1])
+    subprocess.run(["gh", "auth", "setup-git"], check=True, env=_gh_env())
+    subprocess.run(["gh", "repo", "clone", plan.repo, str(repo_path)], check=True, env=_gh_env())
+    subprocess.run(["git", "checkout", "-b", plan.branch], cwd=repo_path, check=True)
+    return repo_path, repo_path, temp_dir
+
+
+def _gh_env() -> dict[str, str]:
+    env = os.environ.copy()
+    if "GH_TOKEN" not in env and "GITHUB_TOKEN" in env:
+        env["GH_TOKEN"] = env["GITHUB_TOKEN"]
+    return env
+
+
+def _agent_command_env(command: tuple[str, ...]) -> dict[str, str] | None:
+    if not command or command[0] != "codex":
+        return None
+    env = os.environ.copy()
+    if not env.get("OPENAI_API_KEY") and env.get("CODEX_API_KEY"):
+        env["OPENAI_API_KEY"] = env["CODEX_API_KEY"]
+    return env
+
+
+def _ensure_git_identity(cwd: Path) -> None:
+    name = subprocess.run(
+        ["git", "config", "user.name"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    email = subprocess.run(
+        ["git", "config", "user.email"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    if name.returncode != 0 or not name.stdout.strip():
+        subprocess.run(["git", "config", "user.name", "linear-orchestrator"], cwd=cwd, check=True)
+    if email.returncode != 0 or not email.stdout.strip():
+        subprocess.run(["git", "config", "user.email", "linear-orchestrator@users.noreply.github.com"], cwd=cwd, check=True)
+
+
+def _commit_message(plan: RunPlan) -> str:
+    tested = ", ".join([*plan.test_commands, *plan.bdd_commands, *plan.preview_commands]) or "No repo test command configured"
+    return (
+        f"Implement {plan.issue_key} because Linear marked it ready for AI execution\n\n"
+        "Constraint: Orchestrator may only create a draft PR; human owners keep merge and release gates.\n"
+        "Rejected: Direct merge from the agent runner | branch protection and product review remain authoritative.\n"
+        "Confidence: medium\n"
+        "Scope-risk: narrow\n"
+        "Directive: Keep this branch tied to the Linear issue and preserve human review before merge.\n"
+        f"Tested: {tested}\n"
+        "Not-tested: Production release, live credentials, and human product acceptance.\n"
+    )
 
 
 def _git_has_changes(cwd: Path) -> bool:

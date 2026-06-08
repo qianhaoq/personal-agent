@@ -14,6 +14,7 @@
     "orchestrator:scan": "python -m linear_orchestrator.cli scan",
     "orchestrator:triage": "python -m linear_orchestrator.cli triage",
     "orchestrator:run": "python -m linear_orchestrator.cli run",
+    "orchestrator:auto": "python -m linear_orchestrator.cli auto",
     "orchestrator:monitor": "python -m linear_orchestrator.cli monitor",
     "orchestrator:doctor": "python -m linear_orchestrator.cli doctor"
   },

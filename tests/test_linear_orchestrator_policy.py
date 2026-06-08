@@ -1,8 +1,10 @@
 from linear_orchestrator.clients import GitHubClient
+from linear_orchestrator.cli import _codex_credentials_present, _repo_write_credentials_ready
 from linear_orchestrator.config import load_config
 from linear_orchestrator.models import Issue
 from linear_orchestrator.policy import decide_issue, decide_issues, title_similarity
 from linear_orchestrator.runner import (
+    apply_run_update,
     build_auto_merge_plans,
     build_monitor_updates,
     load_fixture,
@@ -116,6 +118,8 @@ def test_ready_low_risk_issue_builds_run_plan_with_repo_adapter_commands():
     assert plan.branch.startswith("one-31-")
     assert plan.worktree_path.endswith(plan.branch)
     assert "scripts/run_tests.sh tests/test_linear_orchestrator_policy.py" in plan.test_commands
+    assert "--ask-for-approval" in plan.codex_command
+    assert "never" in plan.codex_command
 
 
 def test_repo_routing_ignores_process_labels_for_github_io_workflow_issue():
@@ -359,3 +363,91 @@ def test_fixture_loader_accepts_top_level_issue_arrays(tmp_path):
 
     assert issues[0].identifier == "ONE-31"
     assert issues[0].labels == ("ai-agent-ready", "area:docs")
+
+
+def test_github_actions_requires_unattended_codex_credentials(monkeypatch):
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("CODEX_API_KEY", raising=False)
+    monkeypatch.delenv("CODEX_OAUTH_ACCESS_TOKEN", raising=False)
+
+    assert _codex_credentials_present() is False
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    assert _codex_credentials_present() is True
+
+
+def test_local_codex_login_allows_subscription_execution(monkeypatch):
+    import linear_orchestrator.cli as cli
+
+    class _Completed:
+        returncode = 0
+
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("CODEX_API_KEY", raising=False)
+    monkeypatch.delenv("CODEX_OAUTH_ACCESS_TOKEN", raising=False)
+    monkeypatch.setattr(cli.subprocess, "run", lambda *args, **kwargs: _Completed())
+
+    assert _codex_credentials_present() is True
+
+
+def test_cross_repo_auto_run_requires_orchestrator_token(monkeypatch):
+    monkeypatch.setenv("GITHUB_REPOSITORY", "qianhaoq/personal-agent")
+    monkeypatch.delenv("ORCHESTRATOR_GH_TOKEN", raising=False)
+
+    assert _repo_write_credentials_ready("qianhaoq/personal-agent") == (True, None)
+    ready, reason = _repo_write_credentials_ready("qianhaoq/qianhaoq.github.io")
+
+    assert ready is False
+    assert "ORCHESTRATOR_GH_TOKEN" in reason
+
+    monkeypatch.setenv("ORCHESTRATOR_GH_TOKEN", "test-token")
+
+    assert _repo_write_credentials_ready("qianhaoq/qianhaoq.github.io") == (True, None)
+
+
+def test_apply_run_update_writes_state_comment_and_labels():
+    config = _config()
+    issue = Issue(
+        identifier="ONE-31",
+        title="personal-agent add Linear orchestrator docs",
+        state="待 Agent 处理",
+        labels=("ai-agent-ready",),
+        raw={"id": "linear-id"},
+    )
+
+    class _FakeLinear:
+        comments = []
+        updates = []
+
+        def team_state_ids(self, team_key):
+            assert team_key == "ONE"
+            return {"AI 评审": "state-ai-review"}
+
+        def team_label_ids(self, team_key):
+            assert team_key == "ONE"
+            return {"ai-agent-ready": "label-agent-ready"}
+
+        def create_comment(self, issue_id, body):
+            self.comments.append((issue_id, body))
+
+        def update_issue(self, issue_id, state_id=None, label_ids=None):
+            self.updates.append((issue_id, state_id, label_ids))
+
+    client = _FakeLinear()
+
+    applied = apply_run_update(
+        "ONE-31",
+        [issue],
+        config,
+        client,
+        next_state="AI 评审",
+        labels_to_add=("ai-agent-ready",),
+        comment="done",
+    )
+
+    assert applied is True
+    assert client.comments == [("linear-id", "done")]
+    assert client.updates == [("linear-id", "state-ai-review", ["label-agent-ready"])]
