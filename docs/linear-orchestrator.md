@@ -4,9 +4,9 @@
 
 The v1 posture is AI-first with explicit risk boundaries:
 
-- Scheduled GitHub Actions run `scan`, `triage`, and `monitor`; `monitor` can arm GitHub auto-merge for eligible low-risk PRs.
-- Linear writes require manual `workflow_dispatch` with `apply=true`.
-- Coding-agent execution requires manual `run` dispatch with `execute_agent=true`.
+- Scheduled GitHub Actions run the safe `auto` loop: apply triage updates, monitor PR/check state, write allowed Linear state updates, and arm GitHub auto-merge for eligible low-risk PRs.
+- Low-risk coding-agent execution is automatic only when conservative unattended Codex credentials are available in the runner. Without `OPENAI_API_KEY` or `CODEX_API_KEY`, GitHub-hosted scheduled runs skip code execution and continue triage/monitor automation.
+- Local runs can use an existing Codex subscription login. If `codex login status` succeeds on your machine, `auto --execute-agent` can run without API-key secrets.
 - Security, trading, secrets, production-release work, and anything labeled `needs-human-review` stays guarded and cannot be merged or released automatically.
 
 ## Commands
@@ -15,6 +15,7 @@ The v1 posture is AI-first with explicit risk boundaries:
 pnpm orchestrator:scan
 pnpm orchestrator:triage
 pnpm orchestrator:run
+pnpm orchestrator:auto
 pnpm orchestrator:monitor
 pnpm orchestrator:doctor
 ```
@@ -27,6 +28,7 @@ python -m linear_orchestrator.cli --json triage
 python -m linear_orchestrator.cli --json triage --apply
 python -m linear_orchestrator.cli --json run --issue ONE-31
 python -m linear_orchestrator.cli --json run --issue ONE-31 --execute-agent
+python -m linear_orchestrator.cli --json auto --apply --execute-agent --auto-merge
 python -m linear_orchestrator.cli --json monitor
 python -m linear_orchestrator.cli --json doctor
 ```
@@ -76,7 +78,7 @@ Each adapter declares repository matchers, setup commands, test commands, option
 `.github/workflows/linear-orchestrator.yml` runs every 30 minutes:
 
 ```text
-scan -> triage -> monitor
+auto --apply --execute-agent --auto-merge --max-runs 1
 ```
 
 Manual dispatch can run one mode at a time:
@@ -85,6 +87,7 @@ Manual dispatch can run one mode at a time:
 - `triage`: use `apply=true` to write Linear comments, labels, and status changes.
 - `monitor`: reads PR/check state and can arm auto-merge when `auto_merge=true`.
 - `run`: use `execute_agent=true` to invoke the coding agent for an eligible issue.
+- `auto`: runs the scheduled safe loop on demand. It writes safe Linear updates when `apply=true`, executes at most one eligible low-risk issue when `execute_agent=true`, and then monitors PR state.
 
 `monitor` only arms auto-merge when all of these are true:
 
@@ -99,7 +102,9 @@ Required secrets for live runs:
 
 - `LINEAR_API_KEY`
 - `ORCHESTRATOR_GH_TOKEN` for cross-repository PR reads, or the default repository `GITHUB_TOKEN` for same-repo checks.
-- `CODEX_API_KEY` or the configured coding-agent credentials when `run --execute-agent` is enabled.
+- `OPENAI_API_KEY` or `CODEX_API_KEY` when GitHub-hosted `auto --execute-agent` should actually invoke Codex.
+
+If you use Codex through a ChatGPT subscription and do not have API keys, run `auto --execute-agent` from a machine where `codex login status` succeeds, or use a self-hosted runner that has that non-interactive Codex login available. GitHub-hosted runners cannot see your local Codex App or Claude Code subscription session.
 
 If `LINEAR_API_KEY` is not configured, scheduled runs skip safely and write a GitHub step summary instead of failing with a stack trace.
 

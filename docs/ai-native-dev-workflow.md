@@ -34,16 +34,17 @@
 
 ## 全局 Orchestrator v1
 
-本仓库同时承载 OneRepublic 的全局 Linear Orchestrator。v1 不要求部署 `personal-agent` 常驻服务，而是通过本地/Codex 手动运行和 GitHub Actions 定时 dry-run 推进队列。
+本仓库同时承载 OneRepublic 的全局 Linear Orchestrator。v1 不要求部署 `personal-agent` 常驻服务，而是通过本地/Codex 运行和 GitHub Actions 定时 safe automation 推进队列。
 
 入口见 [Global Linear Orchestrator](linear-orchestrator.md)：
 
 - `scan` 只读扫描所有非终态 issue。
 - `triage` 补齐标签、目标仓库、重复关系和人工问题；默认 dry-run，`--apply` 才写 Linear。
 - `run` 为符合策略的 issue 生成 coding-agent 执行计划；`--execute-agent` 才真正调用 agent。
+- `auto` 组合执行 safe loop：写入安全 triage 更新、最多执行一个低风险 issue、再同步 PR/check 状态。
 - `monitor` 读取 GitHub PR/check/preview 证据并准备状态同步。
 
-默认边界：AI 可以推进 triage、draft PR、测试和证据收集；merge、release、生产 secret、安全/交易风险和产品判断仍由人类 owner 决定。
+默认边界：AI 可以推进 triage、低风险 draft PR、测试和证据收集；merge、release、生产 secret、安全/交易风险和产品判断仍由人类 owner 决定。GitHub-hosted runner 没有 Codex API/token 时只执行状态流自动化；本机或 self-hosted runner 可以使用已登录的 Codex 订阅执行 `auto --execute-agent`。
 
 ## 人的职责
 
