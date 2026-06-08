@@ -92,8 +92,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
 def _codex_credentials_present() -> bool:
     if os.getenv("GITHUB_ACTIONS") == "true":
-        return bool(os.getenv("OPENAI_API_KEY") or os.getenv("CODEX_API_KEY") or os.getenv("CODEX_OAUTH_ACCESS_TOKEN"))
-    if os.getenv("OPENAI_API_KEY") or os.getenv("CODEX_API_KEY") or os.getenv("CODEX_OAUTH_ACCESS_TOKEN"):
+        return bool(os.getenv("OPENAI_API_KEY") or os.getenv("CODEX_API_KEY"))
+    if os.getenv("OPENAI_API_KEY") or os.getenv("CODEX_API_KEY"):
         return True
     try:
         return subprocess.run(["codex", "login", "status"], capture_output=True, text=True, encoding="utf-8").returncode == 0

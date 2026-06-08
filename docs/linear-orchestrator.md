@@ -5,7 +5,7 @@
 The v1 posture is AI-first with explicit risk boundaries:
 
 - Scheduled GitHub Actions run the safe `auto` loop: apply triage updates, monitor PR/check state, write allowed Linear state updates, and arm GitHub auto-merge for eligible low-risk PRs.
-- Low-risk coding-agent execution is automatic only when unattended Codex credentials are available in the runner. Without `OPENAI_API_KEY`, `CODEX_API_KEY`, or `CODEX_OAUTH_ACCESS_TOKEN`, GitHub-hosted scheduled runs skip code execution and continue triage/monitor automation.
+- Low-risk coding-agent execution is automatic only when conservative unattended Codex credentials are available in the runner. Without `OPENAI_API_KEY` or `CODEX_API_KEY`, GitHub-hosted scheduled runs skip code execution and continue triage/monitor automation.
 - Local runs can use an existing Codex subscription login. If `codex login status` succeeds on your machine, `auto --execute-agent` can run without API-key secrets.
 - Security, trading, secrets, production-release work, and anything labeled `needs-human-review` stays guarded and cannot be merged or released automatically.
 
@@ -102,7 +102,7 @@ Required secrets for live runs:
 
 - `LINEAR_API_KEY`
 - `ORCHESTRATOR_GH_TOKEN` for cross-repository PR reads, or the default repository `GITHUB_TOKEN` for same-repo checks.
-- `OPENAI_API_KEY`, `CODEX_API_KEY`, or `CODEX_OAUTH_ACCESS_TOKEN` when GitHub-hosted `auto --execute-agent` should actually invoke Codex.
+- `OPENAI_API_KEY` or `CODEX_API_KEY` when GitHub-hosted `auto --execute-agent` should actually invoke Codex.
 
 If you use Codex through a ChatGPT subscription and do not have API keys, run `auto --execute-agent` from a machine where `codex login status` succeeds, or use a self-hosted runner that has that non-interactive Codex login available. GitHub-hosted runners cannot see your local Codex App or Claude Code subscription session.
 

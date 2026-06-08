@@ -373,6 +373,11 @@ def test_github_actions_requires_unattended_codex_credentials(monkeypatch):
 
     assert _codex_credentials_present() is False
 
+    monkeypatch.setenv("CODEX_OAUTH_ACCESS_TOKEN", "ignored-hosted-token")
+
+    assert _codex_credentials_present() is False
+
+    monkeypatch.delenv("CODEX_OAUTH_ACCESS_TOKEN", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
     assert _codex_credentials_present() is True
@@ -387,7 +392,6 @@ def test_local_codex_login_allows_subscription_execution(monkeypatch):
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("CODEX_API_KEY", raising=False)
-    monkeypatch.delenv("CODEX_OAUTH_ACCESS_TOKEN", raising=False)
     monkeypatch.setattr(cli.subprocess, "run", lambda *args, **kwargs: _Completed())
 
     assert _codex_credentials_present() is True
